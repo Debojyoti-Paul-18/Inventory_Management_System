@@ -4,8 +4,19 @@
  * then Deploy > New deployment > Web app
  *   Execute as: Me | Who has access: Anyone
  */
-const SHEET_NAME = 'Inventory';
-const HEADERS = ['id','name','category','sku','qty','unit','cost','price','reorder','updated'];
+const SHEET_NAME = "Inventory";
+const HEADERS = [
+  "id",
+  "name",
+  "category",
+  "sku",
+  "qty",
+  "unit",
+  "cost",
+  "price",
+  "reorder",
+  "updated",
+];
 
 function sheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -14,24 +25,31 @@ function sheet_() {
     sh = ss.insertSheet(SHEET_NAME);
     sh.appendRow(HEADERS);
     sh.setFrozenRows(1);
+  } else if (
+    String(sh.getRange(1, 1).getValue()).trim().toLowerCase() !== "id"
+  ) {
+    sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]); // replace any hand-typed header row
   }
   return sh;
 }
 
 function out_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
+    ContentService.MimeType.JSON,
+  );
 }
 
 function doGet() {
   try {
     const rows = sheet_().getDataRange().getValues();
-    const head = rows.shift();
-    const items = rows.filter(r => r[0] !== '').map(r => {
-      const o = {};
-      head.forEach((h, i) => o[h] = r[i]);
-      return o;
-    });
+    const head = rows.shift().map((h) => String(h).trim().toLowerCase());
+    const items = rows
+      .filter((r) => r.some((c) => c !== ""))
+      .map((r) => {
+        const o = {};
+        head.forEach((h, i) => (o[h] = r[i]));
+        return o;
+      });
     return out_({ ok: true, items });
   } catch (err) {
     return out_({ ok: false, error: String(err) });
@@ -44,21 +62,31 @@ function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
     const sh = sheet_();
-    const ids = sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(r => String(r[0]));
+    const ids = sh
+      .getRange(1, 1, sh.getLastRow(), 1)
+      .getValues()
+      .map((r) => String(r[0]));
 
-    if (body.action === 'upsert') {
+    if (body.action === "upsert") {
       const it = body.item;
-      const row = HEADERS.map(h => h === 'updated' ? new Date() : (it[h] ?? ''));
+      if (!it.id) throw new Error("Item has no id");
+      const row = HEADERS.map((h) =>
+        h === "updated" ? new Date() : (it[h] ?? ""),
+      );
       const at = ids.indexOf(String(it.id));
       if (at > 0) sh.getRange(at + 1, 1, 1, HEADERS.length).setValues([row]);
       else sh.appendRow(row);
-    } else if (body.action === 'delete') {
+    } else if (body.action === "delete") {
       const at = ids.indexOf(String(body.id));
       if (at > 0) sh.deleteRow(at + 1);
-    } else if (body.action === 'replaceAll') {
-      if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.length).clearContent();
-      const rows = body.items.map(it => HEADERS.map(h => h === 'updated' ? new Date() : (it[h] ?? '')));
-      if (rows.length) sh.getRange(2, 1, rows.length, HEADERS.length).setValues(rows);
+    } else if (body.action === "replaceAll") {
+      if (sh.getLastRow() > 1)
+        sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.length).clearContent();
+      const rows = body.items.map((it) =>
+        HEADERS.map((h) => (h === "updated" ? new Date() : (it[h] ?? ""))),
+      );
+      if (rows.length)
+        sh.getRange(2, 1, rows.length, HEADERS.length).setValues(rows);
     }
     return out_({ ok: true });
   } catch (err) {
